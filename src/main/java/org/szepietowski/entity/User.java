@@ -2,13 +2,9 @@ package org.szepietowski.entity;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
-import javax.persistence.Id;
 
 @Entity
-public class User {
-
-    @Id
-    private Long id;
+public class User extends BaseEntity {
 
     @Column(unique = true, nullable = false)
     private String name;
@@ -21,14 +17,6 @@ public class User {
 
     @Column
     private String status;
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
 
     public String getName() {
         return name;

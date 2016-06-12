@@ -9,7 +9,7 @@ public class Forum extends BaseEntity {
     @Column(nullable = false)
     private String name;
 
-    @Column
+    @Column(length = 4000)
     private String description;
 
     @ManyToOne
@@ -55,7 +55,7 @@ public class Forum extends BaseEntity {
     public String toString() {
         return "Forum{" +
                 "id=" + getId() +
-                "description='" + description + '\'' +
+                ", description='" + description + '\'' +
                 ", name='" + name + '\'' +
                 '}';
     }

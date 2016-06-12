@@ -20,7 +20,7 @@ import javax.annotation.PostConstruct;
 import java.io.IOException;
 
 @Component
-public class UserReader implements Runnable {
+public class UserReader extends CookiePropertyHolder implements Runnable {
 
     private Logger log = LoggerFactory.getLogger(UserReader.class);
 
@@ -36,18 +36,6 @@ public class UserReader implements Runnable {
     @Value("${forum.member.startPage}")
     private String startPage;
 
-    @Value("${forum.connection.user}")
-    private String userId;
-
-    @Value("${forum.connection.sid}")
-    private String sessionId;
-
-    @Value("${forum.connection.k}")
-    private String kValue;
-
-    @Value("${forum.connection.user-agent}")
-    private String userAgent;
-
     private Connection connection;
 
     private int offset = 0;
@@ -55,10 +43,7 @@ public class UserReader implements Runnable {
     @PostConstruct
     public void setupConnection() {
         connection = Jsoup.connect(baseUrl + startPage)
-                .cookie("forummanutdpl_u", userId)
-                .cookie("forummanutdpl_k", "")
-                .cookie("forummanutdpl_sid", sessionId)
-                .cookie("style_cookie", "printonly")
+                .cookies(getCookieMap())
                 .userAgent(userAgent);
     }
 
@@ -67,9 +52,6 @@ public class UserReader implements Runnable {
         try {
             ScrapingMetadata scrapingMetadata = scrapingMetadataRepository.findByRunner(this.getClass().getName());
             if (scrapingMetadata != null) {
-                if (scrapingMetadata.isComplete()) {
-                    return;
-                }
                 offset = Integer.valueOf(scrapingMetadata.getLastScrapedPage().replaceAll(".*?start=(\\d+)", "$1"));
             }
             boolean continueScraping;
