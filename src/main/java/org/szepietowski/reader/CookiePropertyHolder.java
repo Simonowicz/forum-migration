@@ -21,7 +21,7 @@ public abstract class CookiePropertyHolder {
     protected Map<String, String> getCookieMap() {
         Map<String, String> cookieMap = new HashMap<>();
         cookieMap.put("forummanutdpl_u", userId);
-        cookieMap.put("forummanutdpl_k", "");
+        cookieMap.put("forummanutdpl_k", kValue);
         cookieMap.put("forummanutdpl_sid", sessionId);
         cookieMap.put("style_cookie", "printonly");
         return cookieMap;

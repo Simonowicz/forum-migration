@@ -31,14 +31,16 @@ import java.util.Map;
 
 @Component
 @Scope("prototype")
-public class TopicReader extends CookiePropertyHolder implements Runnable {
+public class TopicReader extends CookiePropertyHolder implements Runnable, PageAware {
 
     private final SimpleDateFormat FORUM_DATE_FORMATTER = new SimpleDateFormat("dd-MM-yyyy, HH:mm");
     private final DateTimeFormatter TO_FORUM_DATE = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+    private final DateTimeFormatter TO_FORUM_DATE_WITH_TIME = DateTimeFormatter.ofPattern("dd-MM-yyyy, HH:mm");
     private  final Map<String, String> MONTHS_MAP;
 
     {
         MONTHS_MAP = new HashMap<>();
+        MONTHS_MAP.put("\\d+ minut\\(y\\) temu", LocalDate.now().format(TO_FORUM_DATE) + ", 20:00");
         MONTHS_MAP.put("Dzisiaj", LocalDate.now().format(TO_FORUM_DATE));
         MONTHS_MAP.put("Wczoraj", LocalDate.now().minusDays(1).format(TO_FORUM_DATE));
         MONTHS_MAP.put(" stycznia ", "-01-");
@@ -54,8 +56,6 @@ public class TopicReader extends CookiePropertyHolder implements Runnable {
         MONTHS_MAP.put(" listopada ", "-11-");
         MONTHS_MAP.put(" grudnia ", "-12-");
     }
-
-
 
     private final Logger log = LoggerFactory.getLogger(TopicReader.class);
 
@@ -84,20 +84,15 @@ public class TopicReader extends CookiePropertyHolder implements Runnable {
     @Override
     public void run() {
         try {
+            log.info("Reading topic: " + topic.getTitle());
             String url = baseUrl + String.format(urlFormat, topic.getForum().getId(), topic.getId());
-            connection = Jsoup.connect(url).cookies(getCookieMap());
+            connection = Jsoup.connect(url).cookies(getCookieMap()).userAgent(userAgent);
             ScrapingMetadata scrapingMetadata = scrapingMetadataRepository.findByRunner(getScrapingMetadataRunnerName());
             if (scrapingMetadata != null) {
                 url = scrapingMetadata.getLastScrapedPage();
             }
             startReading(url);
-        } catch (IndexOutOfBoundsException e) {
-            log.error("IndexOutOfBoundsException was thrown, could not fully read topic: " + topic.getTitle(), e);
-        }
-    }
-
-    public Topic getTopic() {
-        return topic;
+        } catch (IndexOutOfBoundsException ignored) {}
     }
 
     public void setTopic(Topic topic) {
@@ -132,22 +127,8 @@ public class TopicReader extends CookiePropertyHolder implements Runnable {
     private void findNextPageAndContinueReading(Document document) {
         String url = getNextPageFromDocument(document);
         if (url != null) {
-            startReading(url);
+            startReading(baseUrl + url);
         }
-    }
-
-    private String getNextPageFromDocument(Document document) {
-        Element pagination = document.getElementsByClass("pagination").get(0);
-        Element paginationSpan = pagination.getElementsByTag("span").get(0);
-        Element currentIndex = paginationSpan.getElementsByTag("strong").get(0);
-        if (currentIndex.nextElementSibling() != null && currentIndex.nextElementSibling().hasClass("page-sep")) {
-            Element aTag = currentIndex.nextElementSibling().nextElementSibling();
-            String href = aTag.attr("href");
-            href = href.replaceAll("&amp;", "&");
-            href = href.replaceAll("&sid=.*?&", "&");
-            return baseUrl + href.substring(2);
-        }
-        return null;
     }
 
     private void saveScrapingMetadata(String url) {
@@ -181,7 +162,6 @@ public class TopicReader extends CookiePropertyHolder implements Runnable {
             post.setCreated(extractCreatedDate(authorParagraph));
 
             postRepository.saveAndFlush(post);
-            log.info("Saved post with id: " + post.getId());
         }
     }
 
@@ -193,7 +173,7 @@ public class TopicReader extends CookiePropertyHolder implements Runnable {
     private Date extractCreatedDate(Element authorParagraph) {
         String weirdDate = authorParagraph.html().replaceAll("(?s).*»\\s*(.*)", "$1");
         for (Map.Entry<String, String> entry : MONTHS_MAP.entrySet()) {
-            if (weirdDate.contains(entry.getKey())) {
+            if (weirdDate.contains(entry.getKey()) || weirdDate.matches(entry.getKey())) {
                 weirdDate = weirdDate.replaceAll(entry.getKey(), entry.getValue());
                 break;
             }

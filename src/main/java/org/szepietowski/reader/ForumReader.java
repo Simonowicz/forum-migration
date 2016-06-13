@@ -21,11 +21,10 @@ import org.szepietowski.repository.UserRepository;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
-import java.util.List;
 
 @Component
 @Scope("prototype")
-public class ForumReader extends CookiePropertyHolder implements Runnable {
+public class ForumReader extends CookiePropertyHolder implements Runnable, PageAware {
 
     private final Logger log = LoggerFactory.getLogger(ForumReader.class);
 
@@ -50,31 +49,46 @@ public class ForumReader extends CookiePropertyHolder implements Runnable {
     @Value("${forum.maxReconnectTries}")
     private int maxReconnectTries;
 
-    @Value("${forum.ignore.forumIds}")
-    private List<Long> ignoredForumIds;
+    @Value("${forum.ignore.forum}")
+    private String ignoredForum;
 
     private String currentUrl;
     private Forum parentForum;
 
     private Connection connection;
 
+    private boolean subForumsRead = false;
+
     @Override
     public void run() {
-        connection = Jsoup.connect(baseUrl + currentUrl).cookies(getCookieMap());
-        startReading();
+        connection = Jsoup.connect(baseUrl + currentUrl).cookies(getCookieMap()).userAgent(userAgent);
+        startReading(baseUrl + currentUrl);
     }
 
-    private void startReading() {
+    private void startReading(String url) {
         try {
-            Document document = getDocumentWithRetries(baseUrl + currentUrl);
+            Document document = getDocumentWithRetries(url);
+            log.info("Reading forum: " +  parentForum.getName());
             if (document != null) {
-                readAndSaveSubForums(document);
+                if (!subForumsRead) {
+                    readAndSaveSubForums(document);
+                    subForumsRead = true;
+                }
                 readAndSaveTopics(document);
-                handlePagination(document);
+                findNextPageAndContinueReading(document);
             }
         } catch (IOException e) {
             log.error("Could not open url, exception: ", e);
         }
+    }
+
+    private void findNextPageAndContinueReading(Document document) {
+        try {
+            String url = getNextPageFromDocument(document);
+            if (url != null) {
+                startReading(baseUrl + url);
+            }
+        } catch (IndexOutOfBoundsException ignored) {}
     }
 
     private Document getDocumentWithRetries(String url) throws IOException {
@@ -99,13 +113,15 @@ public class ForumReader extends CookiePropertyHolder implements Runnable {
                 Forum forumEntity = new Forum();
                 Element a = dt.child(0);
                 String href = a.attr("href");
-                forumEntity.setId(Long.valueOf(href.replaceAll(".*?f=(\\d+).*", "$1")));
-                forumEntity.setName(a.html());
-                forumEntity.setParentForum(parentForum);
-                forumEntity.setDescription(dt.html().replaceAll("(?s).*<br>\\s*(.*)", "$1"));
-                forumRepository.saveAndFlush(forumEntity);
+                if (!ignoredForum.equals(href)) {
+                    forumEntity.setId(Long.valueOf(href.replaceAll(".*?f=(\\d+).*", "$1")));
+                    forumEntity.setName(a.html());
+                    forumEntity.setParentForum(parentForum);
+                    forumEntity.setDescription(dt.html().replaceAll("(?s).*<br>\\s*(.*)", "$1"));
+                    forumRepository.saveAndFlush(forumEntity);
 
-                createAndExecuteForumReader(href, forumEntity);
+                    createAndExecuteForumReader(href, forumEntity);
+                }
             }
         }
     }
@@ -128,9 +144,7 @@ public class ForumReader extends CookiePropertyHolder implements Runnable {
                         topic = extractCreator(topic, li);
                         topic.setForum(parentForum);
                         topicRepository.saveAndFlush(topic);
-                        if (!ignoredForumIds.contains(forumId)) {
-                            readTopic(topic);
-                        }
+                        readTopic(topic);
                     }
                 }
             }
@@ -140,24 +154,6 @@ public class ForumReader extends CookiePropertyHolder implements Runnable {
     private void readTopic(Topic topic) {
         topicReader.setTopic(topic);
         topicReader.run();
-    }
-
-    private void handlePagination(Document document) throws IOException {
-        Elements paginations = document.getElementsByClass("pagination");
-        for (Element pagination : paginations) {
-            if (pagination.html().contains("tematy")) {
-                Elements aTags = pagination.getElementsByTag("a");
-                for (Element a : aTags) {
-                    String href = a.attr("href");
-                    if (!"#".equals(href)) {
-                        Document nextPage = getDocumentWithRetries(baseUrl + href.substring(2));
-                        readAndSaveTopics(nextPage);
-                    }
-                }
-                break;
-            }
-        }
-
     }
 
     private Topic extractCreator(Topic topic, Element li) {
@@ -203,6 +199,4 @@ public class ForumReader extends CookiePropertyHolder implements Runnable {
     public void setParentForum(Forum parentForum) {
         this.parentForum = parentForum;
     }
-
-
 }
