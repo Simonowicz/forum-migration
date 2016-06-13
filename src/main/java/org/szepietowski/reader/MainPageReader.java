@@ -70,10 +70,6 @@ public class MainPageReader extends CookiePropertyHolder implements Runnable {
         if (forum == null) {
             forum = new Forum();
             forum.setId(forumId);
-        } else {
-            if (!forum.getName().equals(aTag.html())) {
-                forum.setId(forumId * 1000);
-            }
         }
         forum.setName(aTag.html());
         forumRepository.saveAndFlush(forum);

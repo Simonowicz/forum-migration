@@ -151,17 +151,21 @@ public class TopicReader extends CookiePropertyHolder implements Runnable, PageA
     private void readAndSavePosts(Document document) {
         Elements postBodies = document.getElementsByClass("postbody");
         for (Element postBody : postBodies) {
-            Post post = new Post();
-            Element authorParagraph = postBody.getElementsByClass("author").get(0);
-            Element a = authorParagraph.getElementsByAttributeValueStarting("href", "./memberlist.php").get(0);
-            User author = userRepository.findOne(Long.valueOf(a.attr("href").replaceAll(".*u=(\\d+).*", "$1")));
-            post.setId(extractId(authorParagraph));
-            post.setAuthor(author);
-            post.setTopic(topic);
-            post.setContent(postBody.getElementsByClass("content").get(0).html());
-            post.setCreated(extractCreatedDate(authorParagraph));
+            try {
+                Post post = new Post();
+                Element authorParagraph = postBody.getElementsByClass("author").get(0);
+                Element a = authorParagraph.getElementsByAttributeValueStarting("href", "./memberlist.php").get(0);
+                User author = userRepository.findOne(Long.valueOf(a.attr("href").replaceAll(".*u=(\\d+).*", "$1")));
+                post.setId(extractId(authorParagraph));
+                post.setAuthor(author);
+                post.setTopic(topic);
+                post.setContent(postBody.getElementsByClass("content").get(0).html());
+                post.setCreated(extractCreatedDate(authorParagraph));
 
-            postRepository.saveAndFlush(post);
+                postRepository.saveAndFlush(post);
+            } catch (Exception e) {
+                log.error("Error reading posts in topic: " + topic.getTitle(), e);
+            }
         }
     }
 
